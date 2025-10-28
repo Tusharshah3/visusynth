@@ -30,6 +30,7 @@ const Process = () => {
   const [summary, setSummary] = useState("");
   const [summarizing, setSummarizing] = useState(false);
   const [usePreprocessing, setUsePreprocessing] = useState(true);
+  const [useAiCorrection, setUseAiCorrection] = useState(true);
   const [processingStep, setProcessingStep] = useState("");
 
   const files = location.state?.files || [];
@@ -110,9 +111,40 @@ const Process = () => {
 
       await worker.terminate();
 
+      let finalText = allText.trim();
+
+      // Apply AI correction if enabled
+      if (useAiCorrection && finalText.length > 0) {
+        setProcessingStep("AI is correcting OCR errors...");
+        setProgress(95);
+        
+        try {
+          const { data, error } = await supabase.functions.invoke('correct-ocr-text', {
+            body: { text: finalText }
+          });
+
+          if (error) throw error;
+
+          if (data?.correctedText) {
+            finalText = data.correctedText;
+            toast({
+              title: "AI correction applied!",
+              description: "Text has been improved with AI",
+            });
+          }
+        } catch (error: any) {
+          console.error("AI correction error:", error);
+          toast({
+            title: "AI correction failed",
+            description: "Using original OCR text",
+            variant: "destructive",
+          });
+        }
+      }
+
       setProcessingStep("Finalizing...");
-      setExtractedText(allText.trim());
-      setEditedText(allText.trim());
+      setExtractedText(finalText);
+      setEditedText(finalText);
       setProgress(100);
 
       toast({
@@ -385,14 +417,31 @@ const Process = () => {
                   </div>
                 )}
 
-                <div className="p-4 bg-muted rounded-lg">
-                  <h3 className="font-semibold mb-2">Processing Info</h3>
-                  <ul className="text-sm space-y-1 text-muted-foreground">
-                    <li>• Files processed: {files.length}</li>
-                    <li>• Language: {language === "eng" ? "English" : language === "hin" ? "Hindi" : "English + Hindi"}</li>
-                    <li>• Characters: {editedText.length}</li>
-                    <li>• Words: {editedText.split(/\s+/).filter(w => w.length > 0).length}</li>
-                  </ul>
+                <div className="p-4 bg-muted rounded-lg space-y-4">
+                  <div>
+                    <h3 className="font-semibold mb-2">Processing Info</h3>
+                    <ul className="text-sm space-y-1 text-muted-foreground">
+                      <li>• Files processed: {files.length}</li>
+                      <li>• Language: {language === "eng" ? "English" : language === "hin" ? "Hindi" : "English + Hindi"}</li>
+                      <li>• Characters: {editedText.length}</li>
+                      <li>• Words: {editedText.split(/\s+/).filter(w => w.length > 0).length}</li>
+                    </ul>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="ai-correction" className="text-sm font-medium">
+                      AI Text Correction
+                    </Label>
+                    <Switch
+                      id="ai-correction"
+                      checked={useAiCorrection}
+                      onCheckedChange={setUseAiCorrection}
+                      disabled={processing}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Uses AI to fix OCR errors and improve text accuracy
+                  </p>
                 </div>
               </Card>
             </div>
