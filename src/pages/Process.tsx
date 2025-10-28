@@ -59,7 +59,14 @@ const Process = () => {
     let allText = "";
 
     try {
-      const worker = await createWorker(language);
+      const worker = await createWorker(language, 1, {
+        logger: (m) => {
+          if (m.status === 'recognizing text') {
+            const progress = Math.floor(m.progress * 90);
+            setProgress(progress);
+          }
+        }
+      });
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
@@ -72,7 +79,15 @@ const Process = () => {
         setProgress(((i + 1) / files.length) * 90);
 
         const { data: { text } } = await worker.recognize(file);
-        allText += `\n\n--- Page ${i + 1} ---\n\n${text}`;
+        
+        // Preserve spacing and line breaks from OCR
+        const formattedText = text
+          .split('\n')
+          .map(line => line.trim())
+          .filter(line => line.length > 0)
+          .join('\n');
+        
+        allText += `\n\n--- Page ${i + 1} ---\n\n${formattedText}\n`;
       }
 
       await worker.terminate();
