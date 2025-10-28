@@ -8,10 +8,14 @@ import { Progress } from "@/components/ui/progress";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Download, FileText } from "lucide-react";
+import { Loader2, Download, FileText, Sparkles, Copy, FileDown } from "lucide-react";
 import { createWorker } from "tesseract.js";
 import { PDFDocument, rgb } from "pdf-lib";
 import { User } from "@supabase/supabase-js";
+import { preprocessImage } from "@/utils/imagePreprocessing";
+import { downloadAsText, downloadAsMarkdown, copyToClipboard } from "@/utils/exportUtils";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 const Process = () => {
   const location = useLocation();
@@ -23,6 +27,10 @@ const Process = () => {
   const [extractedText, setExtractedText] = useState("");
   const [editedText, setEditedText] = useState("");
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
+  const [summary, setSummary] = useState("");
+  const [summarizing, setSummarizing] = useState(false);
+  const [usePreprocessing, setUsePreprocessing] = useState(true);
+  const [processingStep, setProcessingStep] = useState("");
 
   const files = location.state?.files || [];
   const language = location.state?.language || "eng";
@@ -59,6 +67,7 @@ const Process = () => {
     let allText = "";
 
     try {
+      setProcessingStep("Initializing OCR engine...");
       const worker = await createWorker(language, 1, {
         logger: (m) => {
           if (m.status === 'recognizing text') {
@@ -69,14 +78,23 @@ const Process = () => {
       });
 
       for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+        let file = files[i];
         
         // Validate file is an image
         if (!file.type.startsWith('image/')) {
           throw new Error(`File ${file.name} is not an image. Please upload only image files.`);
         }
+
+        setProcessingStep(`Processing file ${i + 1} of ${files.length}...`);
+        
+        // Preprocess image if enabled
+        if (usePreprocessing) {
+          setProcessingStep(`Enhancing image ${i + 1}...`);
+          file = await preprocessImage(file);
+        }
         
         setProgress(((i + 1) / files.length) * 90);
+        setProcessingStep(`Extracting text from file ${i + 1}...`);
 
         const { data: { text } } = await worker.recognize(file);
         
@@ -92,6 +110,7 @@ const Process = () => {
 
       await worker.terminate();
 
+      setProcessingStep("Finalizing...");
       setExtractedText(allText.trim());
       setEditedText(allText.trim());
       setProgress(100);
@@ -108,6 +127,59 @@ const Process = () => {
       });
     } finally {
       setProcessing(false);
+      setProcessingStep("");
+    }
+  };
+
+  const handleSummarize = async () => {
+    if (!editedText || editedText.length < 100) {
+      toast({
+        title: "Text too short",
+        description: "Please provide at least 100 characters to summarize",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSummarizing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('summarize-text', {
+        body: { text: editedText }
+      });
+
+      if (error) throw error;
+
+      if (data?.summary) {
+        setSummary(data.summary);
+        toast({
+          title: "Summary generated!",
+          description: "AI-powered summary is ready",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Summarization failed",
+        description: error.message || "Failed to generate summary",
+        variant: "destructive",
+      });
+    } finally {
+      setSummarizing(false);
+    }
+  };
+
+  const handleCopyText = async () => {
+    const success = await copyToClipboard(editedText);
+    if (success) {
+      toast({
+        title: "Copied!",
+        description: "Text copied to clipboard",
+      });
+    } else {
+      toast({
+        title: "Copy failed",
+        description: "Could not copy to clipboard",
+        variant: "destructive",
+      });
     }
   };
 
@@ -188,7 +260,12 @@ const Process = () => {
             <Card className="p-8 mb-6 animate-slide-up">
               <div className="flex items-center gap-4 mb-4">
                 <Loader2 className="w-8 h-8 text-primary animate-spin" />
-                <span className="text-lg font-medium">Processing {files.length} file(s)...</span>
+                <div>
+                  <span className="text-lg font-medium">Processing {files.length} file(s)...</span>
+                  {processingStep && (
+                    <p className="text-sm text-muted-foreground mt-1">{processingStep}</p>
+                  )}
+                </div>
               </div>
               <Progress value={progress} className="h-2" />
               <p className="text-sm text-muted-foreground mt-4">
@@ -212,46 +289,109 @@ const Process = () => {
                 />
               </Card>
 
-              <Card className="p-6">
-                <h2 className="text-xl font-semibold mb-4">Actions</h2>
-                <div className="space-y-4">
-                  <Button
-                    onClick={generatePDF}
-                    className="w-full gradient-primary shadow-glow"
-                    size="lg"
-                    disabled={!editedText}
-                  >
-                    <FileText className="mr-2 h-5 w-5" />
-                    Generate Searchable PDF
-                  </Button>
-
-                  {pdfBlob && (
+              <Card className="p-6 space-y-6">
+                <div>
+                  <h2 className="text-xl font-semibold mb-4">Actions</h2>
+                  <div className="space-y-3">
                     <Button
-                      onClick={handleDownload}
-                      variant="outline"
+                      onClick={handleSummarize}
                       className="w-full"
+                      variant="outline"
                       size="lg"
+                      disabled={!editedText || summarizing}
                     >
-                      <Download className="mr-2 h-5 w-5" />
-                      Download PDF
+                      {summarizing ? (
+                        <>
+                          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                          Summarizing...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="mr-2 h-5 w-5" />
+                          AI Summarize
+                        </>
+                      )}
                     </Button>
-                  )}
 
-                  <Button
-                    onClick={() => navigate("/upload")}
-                    variant="ghost"
-                    className="w-full"
-                  >
-                    Process More Documents
-                  </Button>
+                    <Button
+                      onClick={generatePDF}
+                      className="w-full gradient-primary shadow-glow"
+                      size="lg"
+                      disabled={!editedText}
+                    >
+                      <FileText className="mr-2 h-5 w-5" />
+                      Generate PDF
+                    </Button>
+
+                    {pdfBlob && (
+                      <Button
+                        onClick={handleDownload}
+                        variant="outline"
+                        className="w-full"
+                        size="lg"
+                      >
+                        <Download className="mr-2 h-5 w-5" />
+                        Download PDF
+                      </Button>
+                    )}
+
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => downloadAsText(editedText)}
+                        variant="ghost"
+                        className="flex-1"
+                        disabled={!editedText}
+                      >
+                        <FileDown className="mr-2 h-4 w-4" />
+                        TXT
+                      </Button>
+                      <Button
+                        onClick={() => downloadAsMarkdown(editedText)}
+                        variant="ghost"
+                        className="flex-1"
+                        disabled={!editedText}
+                      >
+                        <FileDown className="mr-2 h-4 w-4" />
+                        MD
+                      </Button>
+                      <Button
+                        onClick={handleCopyText}
+                        variant="ghost"
+                        className="flex-1"
+                        disabled={!editedText}
+                      >
+                        <Copy className="mr-2 h-4 w-4" />
+                        Copy
+                      </Button>
+                    </div>
+
+                    <Button
+                      onClick={() => navigate("/upload")}
+                      variant="ghost"
+                      className="w-full"
+                    >
+                      Process More Documents
+                    </Button>
+                  </div>
                 </div>
 
-                <div className="mt-6 p-4 bg-muted rounded-lg">
+                {summary && (
+                  <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg">
+                    <h3 className="font-semibold mb-2 flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-primary" />
+                      AI Summary
+                    </h3>
+                    <p className="text-sm">{summary}</p>
+                  </div>
+                )}
+
+                <div className="p-4 bg-muted rounded-lg">
                   <h3 className="font-semibold mb-2">Processing Info</h3>
                   <ul className="text-sm space-y-1 text-muted-foreground">
                     <li>• Files processed: {files.length}</li>
                     <li>• Language: {language === "eng" ? "English" : language === "hin" ? "Hindi" : "English + Hindi"}</li>
                     <li>• Characters: {editedText.length}</li>
+                    <li>• Words: {editedText.split(/\s+/).filter(w => w.length > 0).length}</li>
                   </ul>
                 </div>
               </Card>

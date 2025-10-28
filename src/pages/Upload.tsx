@@ -101,7 +101,7 @@ const Upload = () => {
           <div className="space-y-6 animate-slide-up">
             <FileUpload onFilesSelected={handleFilesSelected} />
 
-            <div className="grid md:grid-cols-2 gap-6">
+            <div className="space-y-4">
               <div>
                 <Label htmlFor="language" className="text-base font-semibold mb-2 block">
                   Language
@@ -116,6 +116,28 @@ const Upload = () => {
                     <SelectItem value="eng+hin">English + Hindi</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="p-4 bg-muted rounded-lg">
+                <h3 className="font-semibold mb-3">Features</h3>
+                <ul className="text-sm space-y-2">
+                  <li className="flex items-start gap-2">
+                    <span className="text-primary">✓</span>
+                    <span>Multi-language OCR with enhanced image preprocessing</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-primary">✓</span>
+                    <span>AI-powered text summarization</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-primary">✓</span>
+                    <span>Interactive text editor with real-time preview</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-primary">✓</span>
+                    <span>Export as PDF, TXT, or Markdown</span>
+                  </li>
+                </ul>
               </div>
             </div>
 
