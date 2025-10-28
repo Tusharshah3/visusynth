@@ -63,6 +63,12 @@ const Process = () => {
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
+        
+        // Validate file is an image
+        if (!file.type.startsWith('image/')) {
+          throw new Error(`File ${file.name} is not an image. Please upload only image files.`);
+        }
+        
         setProgress(((i + 1) / files.length) * 90);
 
         const { data: { text } } = await worker.recognize(file);

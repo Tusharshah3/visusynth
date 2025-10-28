@@ -19,8 +19,7 @@ const FileUpload = ({ onFilesSelected, maxFiles = 10 }: FileUploadProps) => {
   const { getRootProps, getInputProps, isDragActive, acceptedFiles } = useDropzone({
     onDrop,
     accept: {
-      'image/*': ['.jpg', '.jpeg', '.png', '.tiff', '.webp'],
-      'application/pdf': ['.pdf']
+      'image/*': ['.jpg', '.jpeg', '.png', '.tiff', '.webp']
     },
     maxFiles,
   });
@@ -49,7 +48,7 @@ const FileUpload = ({ onFilesSelected, maxFiles = 10 }: FileUploadProps) => {
               : "Drag & drop files here, or click to select"}
           </p>
           <p className="text-sm text-muted-foreground">
-            Supports JPG, PNG, TIFF, PDF • Max {maxFiles} files
+            Supports JPG, PNG, TIFF, WEBP • Max {maxFiles} files
           </p>
         </div>
         {acceptedFiles.length > 0 && (
